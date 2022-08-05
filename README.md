@@ -1,2 +1,1 @@
-# Csharp-GetOpt
-Command line args parser
+# C# Command Line Arguments Parser
