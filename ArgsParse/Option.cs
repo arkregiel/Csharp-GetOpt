@@ -6,9 +6,13 @@ using System.Threading.Tasks;
 
 namespace ArgsParse
 {
-    public class Option
+    public abstract class Option
     {
-        public string Name = string.Empty;
+        public string Name
+        {
+            get;
+            private set;
+        }
 
         private object OptionValue;
 
@@ -21,12 +25,10 @@ namespace ArgsParse
 
             set
             {
-                object val;
-                if (value is string || value is null)
-                    val = value;
+                if (value is string)
+                    OptionValue = FromString(value as string);
                 else
-                    val = value.ToString();
-                OptionValue = FromString(val as string);
+                    OptionValue = value;
             }
         }
 
@@ -36,15 +38,27 @@ namespace ArgsParse
 
         public Option(string optionName, bool expectsValue, bool isOptionRequired = false, object defaultValue = null)
         {
-            Name = "--" + optionName;
+            Name = optionName;
             ExpectsValue = expectsValue;
             IsRequired = isOptionRequired;
             Value = defaultValue;
         }
 
-        public virtual object FromString(string val)
+        public abstract object FromString(string val);
+    }
+
+    public class Option<T> : Option
+    {
+        public Option(string optionName, bool expectsValue = true, bool isOptionRequired = false, T defaultValue = default(T)) :
+            base(optionName, expectsValue, isOptionRequired, defaultValue) {}
+
+        public override object FromString(string val)
         {
-            return val;
+            var converter = System.ComponentModel.TypeDescriptor.GetConverter(typeof(T));
+            if (converter == null)
+                throw new InvalidOperationException($"The type {typeof(T).FullName} does not support converting from string");
+            return converter.ConvertFrom(val);
         }
     }
+
 }

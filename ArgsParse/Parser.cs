@@ -8,50 +8,54 @@ namespace ArgsParse
 {
     public class Parser
     {
-        public List<string> OptionNames;
+        public Dictionary<string, Option> Options;
+        public List<string> OptionNamePrefixes = new List<string>();
 
-        public List<Option> OptionList;
-
-        public Dictionary<string, object> OptionParsed;
-
-        public string[] Data;
-
-        public Parser(string[] args)
+        public Parser(List<string> optionNamePrefixes = null)
         {
-            Data = args;
-            OptionNames = new List<string>();
-            OptionList = new List<Option>();
-            OptionParsed = new Dictionary<string, object>();
+            /* if no path prefixes were specified, use the default, sane list */
+            if (optionNamePrefixes == null)
+                optionNamePrefixes = new List<string>() { "--", "-", "/" };
+
+            Options = new Dictionary<string, Option>();
+
+            /* convert to a list to clone it */
+            OptionNamePrefixes = optionNamePrefixes.ToList();
         }
 
         public void AddOption(Option opt)
         {
-            OptionList.Add(opt);
-            OptionNames.Add(opt.Name);
+            if (Options.ContainsKey(opt.Name))
+                throw new ArgumentException($"Option {opt.Name} already exists");
+            Options.Add(opt.Name, opt);
         }
 
-        public void Parse(string[] args = null)
+        public void Parse(string[] args)
         {
-            if (args != null)
-                Data = args;
-
-            string currentOptionName = null;
             Option currentOption = null;
+            List<Option> foundOptions = new List<Option>();
 
-            foreach (string arg in Data)
+            foreach (string arg in args)
             {
-                if (currentOptionName == null)
+                if (currentOption == null)
                 {
-                    if (!OptionNames.Contains(arg))
-                        throw new Exception($"Unknown option: {arg}");
+                    foreach (string prefix in OptionNamePrefixes)
+                    {
+                        if (arg.StartsWith(prefix) && 
+                            Options.ContainsKey(arg.Substring(prefix.Length)))
+                        {
+                            currentOption = Options[arg.Substring(prefix.Length)];
+                            break;
+                        }
+                    }
 
-                    currentOptionName = arg;
-                    currentOption = OptionList.Single(o => o.Name == currentOptionName);
+                    if (currentOption == null)
+                        throw new Exception($"Unknown option: {arg}");
 
                     if (!currentOption.ExpectsValue)
                     {
-                        OptionParsed[currentOptionName] = true;
-                        currentOptionName = null;
+                        currentOption.Value = true;
+                        foundOptions.Add(currentOption);
                         currentOption = null;
                     }
                 }
@@ -59,33 +63,31 @@ namespace ArgsParse
                 {
                     if (currentOption.ExpectsValue)
                     {
-                        if (OptionNames.Contains(arg))
-                            throw new Exception($"Option {currentOption.Name} expects an argument");
+                        foreach (string prefix in OptionNamePrefixes)
+                        {
+                            if (arg.StartsWith(prefix))
+                                throw new Exception($"Option {currentOption.Name} expects a value.");
+                        }
 
-                        OptionParsed[currentOptionName] = arg;
+                        currentOption.Value = arg;
                     }
                     else
                     {
-                        OptionParsed[currentOptionName] = true;
+                        currentOption.Value = true;
                     }
 
-                    currentOptionName = null;
+                    foundOptions.Add(currentOption);
                     currentOption = null;
                 }
             }
 
             if (currentOption != null && currentOption.ExpectsValue)
-                throw new Exception($"Option {currentOption.Name} expects an argument");
+                throw new ArgumentException($"Option {currentOption.Name} expects an argument");
 
-            foreach (Option opt in OptionList)
+            foreach (Option opt in Options.Values)
             {
-                if (!OptionParsed.ContainsKey(opt.Name))
-                {
-                    if (opt.IsRequired)
-                        throw new Exception($"Option {opt.Name} is requiered");
-                    else
-                        OptionParsed[opt.Name] = opt.Value;
-                }
+                if (opt.IsRequired && !foundOptions.Contains(opt))
+                    throw new ArgumentException($"Option {opt.Name} is requiered");  
             }
         }
     }
